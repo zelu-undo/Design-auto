@@ -29,12 +29,9 @@ except ImportError:
 class AgenteAnalisador:
     """Agente que analisa referências visuais e textuais para gerar um Style Guide."""
     
-    # Modelo para análise de imagens
-    MODELO_LLAVA_15 = "llava-hf/llava-1.5-7b-hf"
+    # Modelo para análise de imagens (Qwen2.5-VL é melhor que LLaVA)
+    MODELO_QWEN = "Qwen/Qwen2.5-VL-7B-Instruct"
     MODELO_LLAVA_16 = "llava-hf/llava-v1.6-mistral-7b-hf"
-    
-    # Modelo leve para texto apenas
-    MODELO_GEMMA = "google/gemma-2-9b-it"
     
     def __init__(self, pasta_projeto: Optional[Path] = None):
         self.pasta_projeto = pasta_projeto

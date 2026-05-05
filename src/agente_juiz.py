@@ -12,10 +12,19 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 # Imports para produção
-# from transformers import CLIPProcessor, CLIPModel
-# from PIL import Image
-# import cv2
-# import numpy as np
+try:
+    from transformers import CLIPProcessor, CLIPModel
+    from PIL import Image
+    import cv2
+    import numpy as np
+    TORCH_DISPONIVEL = True
+except ImportError:
+    TORCH_DISPONIVEL = False
+    CLIPProcessor = None
+    CLIPModel = None
+    Image = None
+    cv2 = None
+    np = None
 
 
 class ModoAvaliacao(Enum):
@@ -27,6 +36,10 @@ class ModoAvaliacao(Enum):
 
 class AgenteJuiz:
     """Agente que avalia imagens."""
+    
+    # Modelos para validação estética
+    MODELO_CLIP = "openai/clip-vit-large-patch14"
+    MODELO_HPSV2 = "yilundu/HPSv2"
     
     # Limiares por modo
     LIMIARES = {

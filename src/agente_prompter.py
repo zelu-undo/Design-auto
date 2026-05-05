@@ -24,8 +24,9 @@ except ImportError:
 class AgentePrompter:
     """Agente que gera prompts profissionais a partir do Style Guide."""
     
-    # Modelo para geração de prompts
-    MODELO_GEMMA = "gemma2:9b"
+    # Modelo para geração de prompts (Phi-3 é melhor que GPT-2)
+    MODELO_PHI3 = "microsoft/Phi-3-mini-4k-instruct"
+    MODELO_LLAMA = "meta-llama/Llama-3.2-3B"
     
     def __init__(self, pasta_projeto: Optional[Path] = None):
         self.pasta_projeto = pasta_projeto
