@@ -1,0 +1,22 @@
+# ArtisanAI Studio - Requisitos
+
+# Core
+PyYAML>=6.0
+
+# Para difusão (SDXL-Turbo) - produção
+# torch>=2.0
+# diffusers>=0.25.0
+# accelerate>=0.25.0
+
+# Para modelos de linguagem (transformers) - produção
+# transformers>=4.35.0
+# bitsandbytes>=0.41.0
+# accelerate>=0.25.0
+
+# Para avaliação - produção
+# opencv-python>=4.8.0
+# numpy>=1.24.0
+# pillow>=10.0.0
+
+# Para análise de imagens - produção
+# scipy>=1.11.0

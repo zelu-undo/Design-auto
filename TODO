@@ -2,73 +2,215 @@
 
 Versão **totalmente gratuita e independente de APIs**, rodando inteiramente sobre modelos open‑source na GPU do Google Colab (T4). Projetada para ser resiliente a interrupções e com memória de longo prazo via persistência de estado em arquivos.
 
+## Objetivo
+
+Adaptar a arquitetura original para rodar de forma estável na T4 do Colab, com foco em simplicidade, velocidade e respeito aos limites de VRAM.
+
+---
+
 ## Visão Geral
 
-O **ArtisanAI Studio** é um pipeline de IA que transforma um briefing de design em imagens prontas para uso profissional, operando como uma linha de produção automatizada. **Esta edição não exige nenhuma chave de API**, usando exclusivamente modelos locais gerenciados dinamicamente para respeitar os limites de VRAM da GPU T4. Todo o conhecimento gerado durante o processo (guia de estilo, prompts, imagens aprovadas, relatórios) é salvo automaticamente no Google Drive, funcionando como uma **memória de longo prazo** que permite retomada e análise histórica.
+O **ArtisanAI Studio** é um pipeline de IA que transforma um briefing de design em imagens prontas para uso profissional, operando como uma linha de produção automatizada. **Esta edição não exige nenhuma chave de API**, usando exclusivamente modelos locais gerenciados dinamicamente para respeitar os limites de VRAM da GPU T4. Todo o conhecimento gerado durante o processo (guia de estilo, prompts, imagens aprovadas, relatórios) é salvo automaticamente, funcionando como uma **memória de longo prazo** que permite retomada e análise histórica.
+
+---
 
 ## Arquitetura (4 Agentes + Orquestrador + Gerenciador de Estado)
 
-### 0. Gerenciador de Estado (a “memória” do projeto)
+### 0. Gerenciador de Estado (a "memória" do projeto)
 - Arquivo `projeto_estado.json` armazena metadados, etapa atual, guias intermediários, lista de prompts gerados, URLs das imagens salvas e avaliações.
 - Toda vez que um agente termina sua tarefa, ele escreve seus resultados **imediatamente** no JSON, antes de ser descarregado da GPU.
-- O Orquestrador só carrega o modelo da etapa seguinte após confirmar que o estado foi salvo. Se a sessão cair, ao reabrir o notebook basta recarregar o estado para continuar exatamente de onde parou.
+- O Orquestrador só carrega o modelo da etapa seguinte após confirmar que o estado foi salvo.
 
 ### 1. Agente Analisador de Estilo (Local)
 - **Entrada aceita**: 
-  - Briefing textual (modo fictício).
+  - Briefing textual.
   - Upload de 3 a 10 imagens de referência (modo real).
 - **Função**: Extrai paleta de cores, estilos tipográficos, iluminação e mood → `style_guide.json`.
 - **Tecnologia**:
-  - **Modo imagem + texto**: **LLaVA 1.6 (Mistral 7B)** via `ollama` no Colab. Usa a mesma instância para processar tanto as imagens de referência quanto o briefing textual, gerando um JSON estruturado.
-  - **Modo apenas texto** (se não houver imagens): **Gemma 2 (2B)** via `ollama`, mais leve e rápido.
-- **Persistência**: O guia de estilo é salvo em `projetos/<nome_projeto>/style_guide.json` e referenciado no `projeto_estado.json`.
+  - **Modelo**: `llava-hf/llava-1.5-7b-hf` (7B em 4‑bit ~5 GB)
+  - Carregar com `transformers` + `bitsandbytes`
+- **Persistência**: O guia de estilo é salvo em `projetos/<nome_projeto>/style_guide.json`.
 
 ### 2. Agente Prompter (Diretor de Arte Local)
-- **Função**: Converter o guia de estilo em `N * 1.5` prompts profissionais (margem de segurança).
-- **Tecnologia**: **Gemma 2 (9B)** via `ollama` (carregado temporariamente após descarregar o Analisador).
-- **Saída**: `prompts.json`, uma lista de objetos com `prompt`, `formato`, `seed` opcional.
-- **Cache inteligente**: Prompts aprovados em projetos anteriores são reaproveitados se o guia de estilo for similar (similaridade de cosseno entre vetores de estilo).
+- **Função**: Converter o guia de estilo em prompts profissionais.
+- **Tecnologia**: 
+  - **Modelo**: `google/gemma-2-9b-it` em 4‑bit (~6 GB)
+  - Carregar com `transformers` + `bitsandbytes`
+- **Saída**: `prompts.json`, uma lista de objetos com `prompt`, `formato`, `seed`.
 
 ### 3. Agente Designer (Artista Digital)
-- **Tecnologia**: **Flux.1 Dev** via `diffusers`, carregado localmente na GPU T4.
-  - Otimizações: `enable_attention_slicing()`, `enable_vae_slicing()`, `torch.bfloat16`.
-  - Resolução padrão: 1024×1024 para feed, 576×1024 para stories.
-- **Cache de prompts**: Imagens geradas com sucesso têm seus prompts marcados como `aprovado` no estado para acelerar futuras execuções.
+- **Tecnologia**: **SDXL‑Turbo** via `diffusers` com `torch.bfloat16` (MODO BÁSICO/PROFISSIONAL/PORTFÓLIO selecionado por argumento).
+  - Resolução: 768×768 (MODO BÁSICO) ou 1024×1024 (MODO PROFISSIONAL/PORTFÓLIO).
+  - Geração esperada: ~5-10s (MODO BÁSICO) ou ~30-40s (MODO PROFISSIONAL/PORTFÓLIO).
 
-### 4. Agente Juiz (Controle de Qualidade 100% Local)
-Três avaliadores independentes (não precisam de GPU simultaneamente):
-1. **CLIP ViT‑L/14** (do OpenAI, modelo local via `transformers`) – calcula a similaridade semântica entre prompt e imagem.
-2. **Aesthetic Predictor** (modelo leve baseado em ViT) – pontuação estética (0–10).
-3. **BRISQUE** (via `opencv-python`) – detecta borramento, ruído e artefatos de compressão.
-- **Regra de aprovação**: CLIP > 0.25 **e** Aesthetic ≥ 5.5 **e** BRISQUE < 30.
-- **Fallback**: Até 3 variações por prompt, depois descarta o prompt e solicita um novo ao Prompter (que pode ser reativado se necessário).
+### 4. Agente Juiz (Controle de Qualidade)
+- **Modo Básico**: CLIP > 0.25, Aesthetic ≥ 5.5, BRISQUE < 30 (automático).
+- **Modo Profissional**: Apenas BRISQUE < 40 (avaliação manual via Gradio).
+- **Modo Portfólio**: CLIP > 0.32, Aesthetic ≥ 6.0, BRISQUE < 25 (automático mais rigoroso).
 
 ### Orquestrador (Maestro)
-- Gerencia o pipeline sequencialmente, decidindo qual modelo carregar/descarregar a cada etapa.
+- Gerencia o pipeline sequencialmente, decidindo qual modelo carregar/descarregar.
 - Lê e escreve `projeto_estado.json` antes de cada transição.
-- Barra de progresso com `tqdm`.
-- Modo **“revisão humana”** via interface Gradio: exibe as imagens geradas no navegador e pede aprovação explícita do usuário (o feedback é registrado no histórico).
-- Gera relatório final em Markdown.
+- Suporta 3 modos de operação: Básico, Profissional, Portfólio.
 
-## Fluxo de Trabalho Detalhado (com memória persistente)
+---
 
-1. Usuário fornece briefing e faz upload de imagens (se desejar).
-2. Orquestrador verifica se existe um estado anterior; se sim, pergunta se deseja retomar ou iniciar novo projeto.
-3. **Analisador** é carregado (LLaVA ou Gemma), processa entrada, salva `style_guide.json` e **atualiza `projeto_estado.json`** com etapa concluída.
-4. Analisador é descarregado da GPU.
-5. **Prompter** é carregado, lê o guia de estilo, gera prompts, salva `prompts.json` e atualiza estado.
-6. Prompter é descarregado.
-7. **Designer** é carregado. Para cada prompt, gera imagem, que é imediatamente salva no Drive (como `.png` temporário).
-8. **Juiz** avalia a imagem. Se aprovada, move para a pasta `imagens_aprovadas` e registra no estado.
-9. Se o número desejado de imagens aprovadas for atingido, o Orquestrador encerra.
-10. Se a execução for interrompida, ao reabrir o notebook o Orquestrador lê o estado, recarrega o modelo da etapa pendente e continua exatamente da última imagem não processada.
+## Modos de Operação
 
-## Gerenciamento de Memória da GPU
+### Modo Básico (--modo basic) - Padrão
+- SDXL-Turbo 768×768, ~5-10s por imagem.
+- Avaliação automática completa (CLIP + Aesthetic + BRISQUE).
+- Sem revisão humana.
+- Ideal para testes e rápida iteração.
 
-Como a T4 tem ~15 GB de VRAM, carregamos apenas um modelo pesado por vez. Para isso:
+### Modo Profissional (--modo pro) - Qualidade Máxima
+- Flux.1 Schnell 1024×1024, ~30-40s por imagem.
+- Apenas BRISQUE (borrão) automático.
+- Revisão manual via interface Gradio:
+  - Botões: "Aprovar", "Recusar", "Regenerar", "Variar".
+- Geração em grade (4 variações por prompt).
+- Suporte a LoRAs locais.
+- Histórico de decisões humanas persistido.
 
-- **Analisador (LLaVA 13B)**: ocupa ~8 GB em 4‑bit (via `bitsandbytes`). Descarregado logo após gerar o JSON.
-- **Prompter (Gemma 2 9B)**: ~6 GB em 4‑bit. Descarregado após gerar prompts.
-- **Designer (Flux.1 Dev)**: ~12 GB (com atenção slicing). Permanece ativo durante toda a etapa de geração.
-- **Juiz (CLIP + Aesthetic)**: modelos leves (~2 GB combinados), podem ser carregados junto com o Designer ou em sequência.
-torch.cuda.empty_cache()
+### Modo Portfólio (--modo portfolio) - Automação com Alta Qualidade
+- Flux.1 Schnell 1024×1024, ~35s por imagem.
+- Avaliação automática mais rigorosa:
+  - CLIP > 0.32, Aesthetic ≥ 6.0, BRISQUE < 25.
+  - Detector de rosto/olhos para prompts de retrato.
+- Llama 3.1 8B para prompts melhores.
+- Sufixo de qualidade mágica: ", professional commercial photography, highly detailed, 8k, sharp focus".
+- 2 prompts alternativos por posição (Juiz escolhe o melhor).
+- Cache de "prompts vencedores" (CSV).
+- Pós-processamento leve (contraste +5%, nitidez).
+- Geração em lote 4 variações por prompt.
+
+---
+
+## Alterações Obrigatórias (Todas Versões)
+
+### Substituir Ollama por transformers + bitsandbytes
+- Não usar servidor Ollama. Carregar modelos diretamente com AutoModelForCausalLM e quantização 4‑bit.
+- Descarregar explicitamente cada modelo após uso (del model, torch.cuda.empty_cache(), gc.collect()).
+
+### Controle de memória agressivo
+- Antes de carregar modelo pesado: torch.cuda.empty_cache().
+- Monitorar VRAM com nvidia-smi via subprocess.
+- Se VRAM > 14 GB, abortar e sugerir reinício.
+
+### Estrutura de persistência mantida
+- `projeto_estado.json` continua sendo a fonte de verdade.
+- Salvar imagens aprovadas em `projetos/<nome>/aprovadas/`.
+- Ao retomar, ler estado e pular prompts já processados.
+
+---
+
+## Fluxo de Trabalho (Modo Básico)
+
+1. Usuário fornece briefing.
+2. Orquestrador verifica estado anterior.
+3. **Analisador** é carregado → processa → salva style_guide → **descarregado**.
+4. **Prompter** é carregado → gera prompts → salva → **descarregado**.
+5. **Designer** gera imagem → move para CPU.
+6. **Juiz** avalia em CPU → aprova/rejeita.
+7. Repetir até N imagens aprovadas.
+
+---
+
+## Fluxo de Trabalho (Modo Profissional)
+
+1. Usuário fornece briefing + referências.
+2. Analisador extrai paleta/mood (rascunho editável).
+3. Usuário escreve/ajusta prompts manualmente.
+4. Para cada prompt, Designer gera 4 variações.
+5. Interface Gradio exibe 4 variações com checkboxes.
+6. Usuário seleciona as aprovadas.
+7. Imagens aprovadas → pasta final; rejeitadas em log.
+8. Relatório final com статистики.
+
+---
+
+## Fluxo de Trabalho (Modo Portfólio)
+
+1. Usuário fornece briefing ("moda sustentável, tons terrosos...").
+2. Llama 3.1 gera prompts com sufixo de qualidade.
+3. Gera 4 variantes por prompt.
+4. Juiz rigoso aprova 2 (CLIP 0.34, estética 6.2, BRISQUE 22).
+5. Pós-processamento leve (contraste +5%, nitidez).
+6. Salva no Drive com nome contendo prompt vencedor.
+
+---
+
+## Uso
+
+```bash
+# Modo Básico (padrão)
+python main.py -p meu_projeto -b "Fashion moderna"
+
+# Modo Profissional (Qualidade Máxima, com revisão manual)
+python main.py -p meu_projeto -b "Logo para startup" --modo pro
+
+# Modo Portfólio (Automação com Alta Qualidade)
+python main.py -p meu_projeto -b "Produto natural" --modo portfolio
+
+# Continuar projeto existente
+python main.py -c -p meu_projeto
+
+# Gerar relatório
+python main.py -r -p meu_projeto
+```
+
+---
+
+## Requisitos
+
+```
+# Core
+PyYAML>=6.0
+
+# Para difusão (todas versões)
+torch>=2.0
+diffusers>=0.25.0
+accelerate>=0.25.0
+
+# Para modelos (transformers)
+transformers>=4.35.0
+bitsandbytes>=0.41.0
+
+# Para avaliação
+opencv-python>=4.8.0
+numpy>=1.24.0
+pillow>=10.0.0
+
+# Para análise
+scipy>=1.11.0
+gradio>=4.0.0  # Modo Profissional
+```
+
+---
+
+## Estrutura de Arquivos
+
+```
+projetos/
+  <nome_projeto>/
+    projeto_estado.json
+    style_guide.json
+    prompts.json
+    aprovado/
+      imagem_*.png
+    rascunho/
+      imagem_*.png
+    relatorio.md
+
+src/
+  __init__.py
+  gerenciador_estado.py
+  agente_analisador.py
+  agente_prompter.py
+  agente_designer.py
+  agente_juiz.py
+  orquestrador.py
+  interface_gradio.py  # Modo Profissional
+  pos_processamento.py  # Modo Portfólio
+  prompts_vencedores.csv # Modo Portfólio
+```
