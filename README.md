@@ -141,20 +141,11 @@ python main.py -p projeto -b "Logo" --modo pro
 
 ## ☁️ Google Colab
 
-### Repositório Público
+### Um Clique (Repositório Público)
 
-Use o botão direto:
+Clique no badge para abrir diretamente:
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/zelu-undo/Design-auto/blob/main/colab.ipynb)
-
-### Repositório Privado (Upload Manual)
-
-1. No seu PC: **Baixe o projeto como ZIP**
-2. Vá para [colab.research.google.com](https://colab.research.google.com)
-3. Crie um novo notebook
-4. Clique em **Arquivo > Fazer upload**
-5. Arraste os arquivos para `/content/`
-6. Execute as células
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github.com/zelu-undo/Design-auto/blob/main/colab.ipynb)
 
 ### Configurações Recomendadas
 
