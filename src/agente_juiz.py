@@ -3,7 +3,7 @@
 Agente Juiz (Controle de Qualidade)
 Avalia imagens usando 4 critérios:
 1. BRISQUE + NIQE (Qualidade Técnica)
-2. HPSv2 (Estética / Preferência Humana)
+2. IMAGEREWARDv2 (Estética / Preferência Humana)
 3. CLIP (Fidelidade ao Prompt)
 4. Face Quality (Qualidade de Rostos)
 
@@ -51,7 +51,7 @@ class ResultadoAvaliacao:
         # Scores individuais
         self.brisque: Optional[float] = None
         self.niqe: Optional[float] = None
-        self.hps: Optional[float] = None
+        self.imagereward: Optional[float] = None
         self.clip: Optional[float] = None
         self.face_quality: Optional[float] = None
         
@@ -65,25 +65,25 @@ class AgenteJuiz:
     
     # Modelos
     MODELO_CLIP = "openai/clip-vit-large-patch14"
-    MODELO_HPSV2 = "yilundu/HPSv2"
+    MODELO_IMAGEREWARD = "Huaistudio/ImageReward-v1.0"
     
     # Limiares por modo
     LIMIARES = {
         ModoAvaliacao.BASIC: {
             "brisque": 35.0,
             "niqe": 5.0,
-            "hps": 0.28,
+            "imagereward": 0.28,
         },
         ModoAvaliacao.PROFISSIONAL: {
             "brisque": 35.0,
             "niqe": 5.0,
-            "hps": 0.28,
+            "imagereward": 0.28,
             "clip": 0.32,
         },
         ModoAvaliacao.PORTFOLIO: {
             "brisque": 30.0,
             "niqe": 4.5,
-            "hps": 0.32,
+            "imagereward": 0.32,
             "clip": 0.35,
             "face_quality": 0.3,
         }
@@ -95,7 +95,7 @@ class AgenteJuiz:
         
         self.modelo_clip = None
         self.processor_clip = None
-        self.modelo_hps = None
+        self.modelo_imagereward = None
         self.device = "cuda" if torch and torch.cuda.is_available() else "cpu"
         
         self.resultados: List[ResultadoAvaliacao] = []
@@ -127,25 +127,25 @@ class AgenteJuiz:
         
         return self.modelo_clip, self.processor_clip
     
-    def _carregar_hps(self) -> Any:
-        """Carrega HPSv2 para estética."""
-        if self.modelo_hps is not None:
-            return self.modelo_hps
+    def _carregar_imagereward(self) -> Any:
+        """Carrega IMAGEREWARDv2 para estética."""
+        if self.modelo_imagereward is not None:
+            return self.modelo_imagereward
         
         if not TORCH_DISPONIVEL:
-            self.modelo_hps = "mock"
-            return self.modelo_hps
+            self.modelo_imagereward = "mock"
+            return self.modelo_imagereward
         
         try:
-            caminho = self.modelo_local + "/HPSv2" if self.modelo_local else None
+            caminho = self.modelo_local + "/IMAGEREWARDv2" if self.modelo_local else None
             if caminho and os.path.exists(caminho):
-                self.modelo_hps = "loaded"
+                self.modelo_imagereward = "loaded"
             else:
-                self.modelo_hps = "mock"
+                self.modelo_imagereward = "mock"
         except Exception as e:
-            self.modelo_hps = "mock"
+            self.modelo_imagereward = "mock"
         
-        return self.modelo_hps
+        return self.modelo_imagereward
     
     def _avaliar_tecnica(self, imagem_path: str) -> Tuple[float, float]:
         """Avalia qualidade técnica (BRISQUE + NIQE)."""
@@ -168,13 +168,13 @@ class AgenteJuiz:
             return 10.0, 1.5
     
     def _avaliar_estetica(self, imagem_path: str, prompt: str = "") -> float:
-        """Avalia estética usando HPSv2 (ou proxy)."""
+        """Avalia estética usando IMAGEREWARDv2 (ou proxy)."""
         if not TORCH_DISPONIVEL:
             return 0.5
         
-        self._carregar_hps()
+        self._carregar_imagereward()
         
-        if self.modelo_hps == "mock":
+        if self.modelo_imagereward == "mock":
             # Proxy: brilho + saturação
             try:
                 img = cv2.imread(imagem_path)
@@ -271,12 +271,12 @@ class AgenteJuiz:
         if niqe >= limiares.get("niqe", 5):
             resultado.erros.append(f"NIQE={niqe:.2f}")
         
-        # 2. Estética (HPSv2)
-        hps = self._avaliar_estetica(imagem_path, prompt)
-        resultado.hps = hps
+        # 2. Estética (IMAGEREWARDv2)
+        imagereward = self._avaliar_estetica(imagem_path, prompt)
+        resultado.imagereward = imagereward
         
-        if hps < limiares.get("hps", 0.28):
-            resultado.erros.append(f"HPS={hps:.3f}")
+        if imagereward < limiares.get("imagereward", 0.28):
+            resultado.erros.append(f"IMAGEREWARD={imagereward:.3f}")
         
         # 3. Fidelidade (CLIP)
         if self.modo != ModoAvaliacao.BASIC:
