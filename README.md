@@ -141,23 +141,20 @@ python main.py -p projeto -b "Logo" --modo pro
 
 ## ☁️ Google Colab
 
-### Opção 1: Botão Direct
+### Repositório Público
 
-Clique nobadge para abrir diretamente no Colab:
+Use o botão direto:
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/zelu-undo/Design-auto/blob/main/colab.ipynb)
 
-### Opção 2: Manual
+### Repositório Privado (Upload Manual)
 
-```python
-#@title Instalar e Executar
-!git clone https://github.com/zelu-undo/Design-auto.git
-%cd Design-auto
-!pip install -r requirements.txt
-
-# Gerar
-!python main.py -p projeto -b "Fashion moderna" -n 5
-```
+1. No seu PC: **Baixe o projeto como ZIP**
+2. Vá para [colab.research.google.com](https://colab.research.google.com)
+3. Crie um novo notebook
+4. Clique em **Arquivo > Fazer upload**
+5. Arraste os arquivos para `/content/`
+6. Execute as células
 
 ### Configurações Recomendadas
 
