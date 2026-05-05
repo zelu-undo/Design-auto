@@ -2,7 +2,7 @@
 """
 Agente Analisador de Estilo
 Extrai paleta de cores, estilos tipográficos, iluminação e mood das imagens de referência.
- Usa transformers + bitsandbytes (quantização 4-bit), sem Ollama.
+Usa transformers + bitsandbytes (quantização 4-bit), sem Ollama.
 """
 
 import gc
@@ -12,9 +12,18 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # Imports para uso local (em produção)
-# import torch
-# from transformers import AutoProcessor, LlavaForConditionalGeneration
-# from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+try:
+    import torch
+    from transformers import AutoProcessor, LlavaForConditionalGeneration
+    from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+    TORCH_DISPONIVEL = True
+except ImportError:
+    TORCH_DISPONIVEL = False
+    torch = None
+    AutoProcessor = None
+    LlavaForConditionalGeneration = None
+    AutoModelForCausalLM = None
+    BitsAndBytesConfig = None
 
 
 class AgenteAnalisador:

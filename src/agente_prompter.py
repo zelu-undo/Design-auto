@@ -9,8 +9,16 @@ import random
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# Imports para uso local (em produção, usar ollama)
-# import ollama
+# Imports para uso local (em produção)
+try:
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    TORCH_DISPONIVEL = True
+except ImportError:
+    TORCH_DISPONIVEL = False
+    torch = None
+    AutoModelForCausalLM = None
+    AutoTokenizer = None
 
 
 class AgentePrompter:
