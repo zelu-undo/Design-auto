@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 # Imports para produção
-# import torch
-# from diffusers import StableDiffusionXLPipeline, FluxPipeline
+import torch
+from diffusers import StableDiffusionXLPipeline, FluxPipeline
 
 
 class ModoDesigner(Enum):
@@ -96,24 +96,23 @@ class AgenteDesigner:
                 "VRAM insuficiente. Considere reiniciar o ambiente Colab."
             )
         
-        # Código real (descomentar em produção com GPU)
-        # config = {"torch_dtype": torch.bfloat16}
-        # if cache_dir:
-        #     config["cache_dir"] = cache_dir
-        # 
-        # if "sdxl" in modelo.lower():
-        #     self.pipeline = StableDiffusionXLPipeline.from_pretrained(modelo, **config)
-        # else:
-        #     self.pipeline = FluxPipeline.from_pretrained(modelo, **config)
-        # 
-        # self.pipeline.enable_attention_slicing()
-        # self.pipeline.enable_vae_slicing()
-        # 
-        # if torch.cuda.is_available():
-        #     self.pipeline.to("cuda")
-        #     self.device = "cuda"
+        # Carregar modelo real
+        config = {"torch_dtype": torch.bfloat16}
+        if cache_dir:
+            config["cache_dir"] = cache_dir
         
-        self.pipeline = "mock_pipeline"
+        if "sdxl" in modelo.lower():
+            self.pipeline = StableDiffusionXLPipeline.from_pretrained(modelo, **config)
+        else:
+            self.pipeline = FluxPipeline.from_pretrained(modelo, **config)
+        
+        self.pipeline.enable_attention_slicing()
+        self.pipeline.enable_vae_slicing()
+        
+        if torch.cuda.is_available():
+            self.pipeline.to("cuda")
+            self.device = "cuda"
+        
         self.modelo_usado = modelo
         return self.pipeline
     
@@ -188,22 +187,23 @@ class AgenteDesigner:
                 guidance_scale = 3.5
         
         if negativo is None:
-            negativo = "low quality, blurry, ugly, deformed"
+            negativo = "low quality, blurry, ugly, deformed, watermark, signature"
         
-        # Gerar imagem (código real descomentar em produção)
-        # generator = torch.Generator(device=self.device).manual_seed(seed)
-        # imagem = self.pipeline(
-        #     prompt=prompt,
-        #     negative_prompt=negativo,
-        #     num_inference_steps=num_inference_steps,
-        #     guidance_scale=guidance_scale,
-        #     height=altura,
-        #     width=largura,
-        #     generator=generator
-        # ).images[0]
-        
-        # Modo mock: criar imagem placeholder
-        imagem = self._criar_imagem_mock(altura, largura, seed)
+        # Gerar imagem usando IA real
+        if self.pipeline and hasattr(self.pipeline, '__call__'):
+            generator = torch.Generator(device=self.device).manual_seed(seed)
+            imagem = self.pipeline(
+                prompt=prompt,
+                negative_prompt=negativo,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+                height=altura,
+                width=largura,
+                generator=generator
+            ).images[0]
+        else:
+            # Pipeline não disponível (sem GPU) - usar fallback
+            raise RuntimeError("Pipeline não inicializado. Execute em ambiente com GPU.")
         
         # Salvar imagem
         caminho = self._salvar_imagem(imagem, seed)
@@ -211,7 +211,7 @@ class AgenteDesigner:
         return caminho, seed
     
     def _criar_imagem_mock(self, altura: int, largura: int, seed: int) -> Any:
-        """Cria uma imagem mock para testes sem GPU."""
+        """Cria uma imagem mock (apenas se não houver GPU)."""
         try:
             from PIL import Image, ImageDraw, ImageFont
             import random

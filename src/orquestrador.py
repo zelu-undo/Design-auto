@@ -399,6 +399,16 @@ class Orquestrador:
         tentativas = 0
         max_tentativas_total = num_imagens * 3
         
+        # Inicializar pipeline de IA antes de gerar
+        print("📥 Carregando modelo de IA...")
+        try:
+            self.designer._inicializar_pipeline()
+            print(f"✅ Modelo carregado: {self.designer.modelo_usado}")
+        except Exception as e:
+            print(f"⚠️ Erro ao carregar modelo: {e}")
+            print("📜 Continuando sem GPU...")
+            raise RuntimeError("GPU não disponível. Execute em ambiente com GPU.")
+        
         estado = self.gerenciador.carregar_estado()
         prompts_list = estado.get("prompts", []) if estado else []
         
