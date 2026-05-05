@@ -139,6 +139,34 @@ python main.py -p projeto -b "Logo" --modo pro
 # Abre automaticamente em: http://localhost:7860
 ```
 
+## ☁️ Google Colab
+
+### Opção 1: Botão Direct
+
+Clique nobadge para abrir diretamente no Colab:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/zelu-undo/Design-auto/blob/main/colab.ipynb)
+
+### Opção 2: Manual
+
+```python
+#@title Instalar e Executar
+!git clone https://github.com/zelu-undo/Design-auto.git
+%cd Design-auto
+!pip install -r requirements.txt
+
+# Gerar
+!python main.py -p projeto -b "Fashion moderna" -n 5
+```
+
+### Configurações Recomendadas
+
+| setting | Value |
+|---------|-------|
+| Runtime | T4 GPU |
+| Ram | High (12GB) |
+| Tempo | Infinite |
+
 ## 💻 Ambiente Google Colab
 
 ```python
