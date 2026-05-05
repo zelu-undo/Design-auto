@@ -31,10 +31,11 @@ class Orquestrador:
         "completo"
     ]
     
-    def __init__(self, nome_projeto: str, pasta_projetos: str = "projetos", modo: str = "basic"):
+    def __init__(self, nome_projeto: str, pasta_projetos: str = "projetos", modo: str = "basic", modelo_local: Optional[str] = None):
         self.nome_projeto = nome_projeto
         self.pasta_projetos = Path(pasta_projetos)
         self.modo = modo
+        self.modelo_local = modelo_local
         
         # Inicializar gerenciador de estado
         self.gerenciador = GerenciadorEstado(nome_projeto, pasta_projetos)
@@ -42,7 +43,7 @@ class Orquestrador:
         # Inicializar agentes com modo
         self.analisador = AgenteAnalisador(self.gerenciador.pasta_projeto)
         self.prompter = AgentePrompter(self.gerenciador.pasta_projeto)
-        self.designer = AgenteDesigner(self.gerenciador.pasta_projeto, modo=modo)
+        self.designer = AgenteDesigner(self.gerenciador.pasta_projeto, modo=modo, modelo_local=modelo_local)
         self.juiz = AgenteJuiz(modo=modo)
         
         # Estado atual

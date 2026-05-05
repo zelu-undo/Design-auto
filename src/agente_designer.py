@@ -62,12 +62,15 @@ class AgenteDesigner:
         ModoDesigner.PORTFOLIO: (1024, 1024)
     }
     
-    def __init__(self, pasta_projeto: Optional[Path] = None, modo: str = "basic"):
+    def __init__(self, pasta_projeto: Optional[Path] = None, modo: str = "basic", modelo_local: Optional[str] = None):
         self.pasta_projeto = pasta_projeto
         self.modo = ModoDesigner(modo) if modo in [m.value for m in ModoDesigner] else ModoDesigner.BASIC
         self.pipeline = None
         self.device = None
         self.modelo_usado = None
+        
+        # Modelo local (sem HuggingFace!)
+        self.modelo_local = modelo_local
         
         # LoRAs carregados (Modo Profissional)
         self.loras = {}
@@ -125,15 +128,21 @@ class AgenteDesigner:
                 "VRAM insuficiente. Considere reiniciar o ambiente Colab."
             )
         
-        # Carregar modelo real
+        # Carregar modelo (local ou HuggingFace)
         config = {"torch_dtype": torch.bfloat16}
+        
+        # Usar modelo local se informado
+        caminho_modelo = self.modelo_local or modelo
+        
         if cache_dir:
             config["cache_dir"] = cache_dir
         
-        if "sdxl" in modelo.lower():
-            self.pipeline = StableDiffusionXLPipeline.from_pretrained(modelo, **config)
+        print(f"📦 Carregando modelo: {caminho_modelo}")
+        
+        if "sdxl" in caminho_modelo.lower():
+            self.pipeline = StableDiffusionXLPipeline.from_pretrained(caminho_modelo, **config)
         else:
-            self.pipeline = FluxPipeline.from_pretrained(modelo, **config)
+            self.pipeline = FluxPipeline.from_pretrained(caminho_modelo, **config)
         
         self.pipeline.enable_attention_slicing()
         self.pipeline.enable_vae_slicing()
@@ -142,7 +151,7 @@ class AgenteDesigner:
             self.pipeline.to("cuda")
             self.device = "cuda"
         
-        self.modelo_usado = modelo
+        self.modelo_usado = caminho_modelo
         return self.pipeline
     
     def _liberar_memoria(self) -> None:
