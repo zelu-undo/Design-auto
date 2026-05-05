@@ -82,11 +82,11 @@ quantas = 3
 | Modelo | Tamanho | Agente |
 |--------|--------|--------|
 | FLUX.1-schnell-FP8 | ~7GB | Designer |
-| Qwen2.5-VL-7B | ~7GB | Analisador |
-| Phi-3-mini-4k | ~3GB | Prompter |
-| CLIP + HPSv2 | ~700MB | Juiz |
+| Qwen2.5-VL-7B | ~16.6GB | Analisador |
+| Phi-3-mini-4k | ~7.64GB | Prompter |
+| CLIP + HPSv2 | ~7GB | Juiz |
 
-**Total: ~18GB** (só 1ª vez)
+**Total: ~38GB** (só 1ª vez)
 
 ---
 
