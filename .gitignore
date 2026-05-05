@@ -44,6 +44,8 @@ htmlcov/
 
 # Projekt specific
 projetos/
+modelo_cache/
+modelos/
 *.json
 !requirements*.txt
 !setup.py

@@ -139,20 +139,31 @@ python main.py -p projeto -b "Logo" --modo pro
 # Abre automaticamente em: http://localhost:7860
 ```
 
-## ☁️ Google Colab (1 Clique!)
+## ☁️ Google Colab
 
 ### Como usar:
 
-1. Clique no link: https://colab.research.google.com/github.com/zelu-undo/Design-auto/blob/main/colab.ipynb
+1. Abra: https://colab.research.google.com/github.com/zelu-undo/Design-auto/blob/main/colab.ipynb
 
-2. Configure:
-   - **Nome do projeto**:ologo_logistica
-   - **Descreva sua ideia**:Logo moderno azul para empresa detransporte
-   - **Quantas imagens**:3
+2. Configure (célula 1):
+   - **projeto**: nome do projeto
+   - **descricao**: sua ideia
+   - **quantas**: número de imagens
+   - **modo**: basic (rápido) ou pro (melhor)
+   - **modelo_local**: pasta local (opcional)
 
-3. Execute as células em ordem (1 a 5)
+3. Execute as células em ordem
 
-### Configurações Recomendadas
+### Sobre os Modelos:
+
+| Opção | Como usar |
+|------|----------|
+| Automático | Deixe modelo_local vazio - baixa do HuggingFace (~2GB) |
+| Offline | Indique pasta local com modelo baixado |
+
+### Primeira vez:
+- O modelo é baixado automaticamente (~2GB)
+- Fica em cache para próximas execuções
 
 | setting | Value |
 |---------|-------|
