@@ -1,221 +1,161 @@
 # 🏭 ArtisanAI Studio
 
-**100% local, free autonomous design factory** - optimized for Google Colab (T4 GPU).
+**Fábrica autônoma de design 100% local** - otimizada para Google Colab (GPU T4). Sem APIs, sem custos.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python: 3.9+](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
 
-ArtisanAI Studio é uma fábrica autônoma de design que usa IA para gerar imagens a partir de briefings textuais. Suporta múltiplos modos de operação e avaliação automática ou manual.
+---
 
-## ✨ Recursos
+## 🎯 O que é?
 
-- **3 Modos de Operação**: Basic, Professional, Portfolio
-- **Geração Local**: Sem custos de API - tudo roda na sua GPU
-- **Avaliação Automática**: CLIP, Aesthetic Score, BRISQUE
-- **Revisão Manual**: Interface Gradio opcional
-- **Metadados Falsos**: Anonimiza imagens geradas
-- **Análise de Sites**: Extrai estilo de websites e Instagram
+ArtisanAI Studio gera imagens automaticamente a partir de uma descrição textual. Você diz o que quer, e o sistema:
 
-## 🚀 Quick Start
+1. **Analisa** sua ideia
+2. **Cria** prompts otimizados
+3. **Gera** imagens com FLUX
+4. **Avalia** automaticamente (4 critérios)
+5. **Repete** se necessário
 
-```bash
-# Clone o projeto
-git clone https://github.com/zelu-undo/Design-auto.git
-cd Design-auto
+Tudo roda no seu Colab com GPU T4.
 
-# Instale as dependências (ambiente com GPU recomendado)
-pip install -r requirements.txt
+---
 
-# Execute via CLI
-python main.py -p meu_projeto -b "Fashion moderna" -n 5
+## 🏗️ Arquitetura (4 Agentes)
 
-# OU execute via GUI
-python main.py --gui
 ```
+┌─────────────────────────────────────────────────────────────┐
+│              ORQUESTRADOR                                    │
+├─────────────────────────────────────────────────────────────┤
+│  [Briefing] → [Analisador] → [Prompter] → [Designer] → [Juiz]  │
+│       ↓            ↓           ↓          ↓           ↓        │
+│     style      prompts    imagens    avaliação                │
+│     guide               geradas     ↓                         │
+│                              │                         │
+│                     Aprovada? → Sim → ✅ Salva              │
+│                        │                               │
+│                       Não → 🔁 Refaz (max 3x)             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+| Agente | Modelo | Função |
+|--------|--------|--------|
+| **Analisador** | Qwen2.5-VL | Extrai estilo (cores, luz, mood) |
+| **Prompter** | Phi-3-mini | Cria prompts otimizados |
+| **Designer** | FLUX.1-schnell-FP8 | Gera imagens |
+| **Juiz** | CLIP + HPSv2 | Valida qualidade |
+
+---
+
+## 🎨 Juiz (4 Critérios de Avaliação)
+
+O Juiz avalia cada imagem antes de aprovar:
+
+| # | Critério | Modelo | O que avalia | Limiar |
+|---|---------|--------|-------------|-------|
+| 1 | **Técnica** | BRISQUE + NIQE | Borrão, ruído | BRISQUE < 35 |
+| 2 | **Estética** | HPSv2 | Beleza humana | HPS > 0.28 |
+| 3 | **Fidelidade** | CLIP | Segue o prompt? | CLIP > 0.32 |
+| 4 | **Rosto** | Haar Cascade | Qualidade facial | score < 0.3 |
+
+**Imagem só é aprovada se passar em TODOS os critérios.**
+
+---
+
+## 🚀 Quick Start (Colab)
+
+1. Abra: https://colab.research.google.com/github.com/zelu-undo/Design-auto/blob/main/colab.ipynb
+2. Configure: projeto, descrição, quantidade
+3. Execute todas as células
+
+```python
+# Célula de configuração
+projeto = "meu-logo"
+descricao = "Logo moderno azul para fintech"
+quantas = 3
+```
+
+---
+
+## 📦 Modelos (baixa só 1ª vez)
+
+| Modelo | Tamanho | Agente |
+|--------|--------|--------|
+| FLUX.1-schnell-FP8 | ~7GB | Designer |
+| Qwen2.5-VL-7B | ~7GB | Analisador |
+| Phi-3-mini-4k | ~3GB | Prompter |
+| CLIP + HPSv2 | ~700MB | Juiz |
+
+**Total: ~18GB** (só 1ª vez)
+
+---
 
 ## 📋 Modos de Operação
 
-| Modo | Modelo | Resolução | Automação | Uso |
-|------|--------|-----------|----------|---------|
-| `basic` | SDXL-Turbo | 768×768 | ✅ Automática | Testes, protótipos |
-| `pro` | Flux.1 Schnell | 1024×1024 | ❌ Revisão manual | Projetos profissionais |
-| `portfolio` | Flux.1 Schnell | 1024×1024 | ✅ Rigorosa | Portfólio, alta qualidade |
+| Modo | Avaliação | Uso |
+|------|----------|------|
+| `basic` | Técnica + Estética | Testes |
+| `pro` | + Fidelidade CLIP | Projetos |
+| `portfolio` | + Rostos | Alta qualidade |
 
-### Exemplos:
+---
 
-```bash
-# Modo básico (padrão)
-python main.py -p projeto1 -b "Fashion elegante" -n 10
-
-# Modo profissional (com revisão manual)
-python main.py -p projeto2 -b "Logo startup" --modo pro
-
-# Modo portfólio (avaliação rigorosa)
-python main.py -p projeto3 -b "Produto premium" --modo portfolio
-```
-
-## 🔧 Opções Avançadas
-
-### Metadados Falsos
-
-Adiciona metadados de câmera profissional para anonimizar imagens geradas por IA:
-
-```bash
-python main.py -p projeto -b "Fashion" --metadados --camera canon_eos
-```
-
-Câmeras disponíveis: `canon_eos` (padrão), `nikon_d850`, `sony_a7r`
-
-### Análise de Website
-
-Extrai paleta de cores e estilo de qualquer site:
-
-```bash
-python main.py --analisar-site https://exemplo.com
-```
-
-### Análise de Instagram
-
-Calcula consistência visual de um perfil:
-
-```bash
-python main.py --analisar-instagram @empresa
-```
-
-## 📁 Estrutura do Projeto
+## 📁 Estrutura
 
 ```
 Design-auto/
-├── main.py                    # Ponto de entrada
-├── requirements.txt          # Dependências
-├── TODO.md               # Especificações técnicas
-├── .gitignore
-├── projetos/            # Projetos gerados
-│   └── [projeto]/
-│       ├── style_guide.json
-│       ├── prompts.json
-│       ├── aprovadas/
-│       └── rejeitadas/
-└── src/
-    ├── __init__.py
-    ├── orquestrador.py     # Orquestrador principal
-    ├── agente_analisador.py  # Análise de estilo
-    ├── agente_prompter.py  # Geração de prompts
-    ├── agente_designer.py  # Geração de imagens
-    ├── agente_juiz.py    # Avaliação de qualidade
-    ├── gerenciador_estado.py  # Persistência
-    ├── interface_gradio.py  # UI Gradio
-    ├── pos_processamento.py  # Pós-processamento
-    ├── metadados.py     # Metadados EXIF
-    └── analisador_site.py  # Análise de sites
+├── colab.ipynb              # Notebook Colab
+├── main.py                 # CLI
+├── src/
+│   ├── orquestrador.py    # Orquestra tudo
+│   ├── agente_analisador.py
+│   ├── agente_prompter.py
+│   ├── agente_designer.py
+│   └── agente_juiz.py     # 4 critérios
+└── projetos/
+    └── {projeto}/
+        ├── style_guide.json
+        ├── prompts.json
+        ├── aprovadas/
+        └── rejeitadas/
 ```
 
-## 🎯 Como Funciona
+---
 
-### Pipeline Completo
-
-1. **Analisador** - Extrai paleta de cores e estilo do briefing
-2. **Prompter** - Gera prompts otimizados para o modelo
-3. **Designer** - Gera imagens usando SDXL-Turbo ou Flux.1
-4. **Juiz** - Avalia qualidade (CLIP, Aesthetic, BRISQUE)
-5. **Loop** - Repete até atingir meta de imagens aprovadas
-
-### Avaliação
-
-Cada imagem é avaliada por 3 métricas:
-
-| Métrica | Descrição | thresholds |
-|---------|----------|-----------|
-| CLIP | Similaridade texto-imagem | > 0.25 (basic), > 0.32 (portfolio) |
-| Aesthetic | Beleza perceptual | ≥ 5.5 (basic), ≥ 6.0 (portfolio) |
-| BRISQUE | Qualidade técnica | < 30 (basic), < 25 (portfolio) |
-
-## 🖥️ Interface Gradio
-
-No modo `pro`, abre interface para revisão manual:
+## 💻 Uso Local
 
 ```bash
-python main.py -p projeto -b "Logo" --modo pro
-# Abre automaticamente em: http://localhost:7860
+# Instalar
+pip install -r requirements.txt
+
+# Executar
+python main.py -p projeto -b "Logo azul moderno" -n 3
 ```
 
-## ☁️ Google Colab
+---
 
-### Como usar:
-
-1. Abra: https://colab.research.google.com/github.com/zelu-undo/Design-auto/blob/main/colab.ipynb
-
-2. Configure (célula 1):
-   - **projeto**: nome do projeto
-   - **descricao**: sua ideia
-   - **quantas**: número de imagens
-   - **modo**: basic (rápido) ou pro (melhor)
-   - **modelo_local**: pasta local (opcional)
-
-3. Execute as células em ordem
-
-### Sobre os Modelos:
-
-| Opção | Como usar |
-|------|----------|
-| Automático | Deixe modelo_local vazio - baixa do HuggingFace (~2GB) |
-| Offline | Indique pasta local com modelo baixado |
-
-### Primeira vez:
-- O modelo é baixado automaticamente (~2GB)
-- Fica em cache para próximas execuções
-
-| setting | Value |
-|---------|-------|
-| Runtime | T4 GPU |
-| Ram | High (12GB) |
-| Tempo | Infinite |
-
-## 💻 Ambiente Google Colab
-
-```python
-# Célula 1: Instalar dependências
-!pip install -r requirements.txt
-!apt-get update && apt-get install -y git
-
-# Célula 2: Clonar e executar
-!git clone https://github.com/zelu-undo/Design-auto.git
-%cd Design-auto
-!python main.py -p projeto -b "Fashion" -n 5
-```
-
-## ⚙️ Requisitos
+## 🔧 Requisitos
 
 - Python 3.9+
-- GPU com 8GB+ VRAM (T4 recommended)
-- 15GB+ disco
+- GPU com 12GB+ VRAM (T4 recommended)
+- 20GB+ disco
 
-### Dependências Principais
-
-- `torch` + `diffusers`
-- `transformers` + `bitsandbytes`
-- `gradio` (interface)
-- `piexif` (metadados)
-- `beautifulsoup4` + `requests` (análise de sites)
+---
 
 ## 🤝 Contribuição
 
 ```bash
-# Fork
-# Clone seu fork
-# Create branch
 git checkout -b feature/nova-funcionalidade
-# Commit
 git commit -m "feat: nova funcionalidade"
-# Push
 git push origin feature/nova-funcionalidade
-# PR
 ```
-
-## 📄 Licença
-
-MIT License - Veja [LICENSE](LICENSE) para detalhes.
 
 ---
 
-**Nota**: Este projeto funciona em modo mock sem GPU. Para geração real, instale as dependências e execute em ambiente com GPU T4 ou superior.
+## 📄 Licença
+
+MIT - Veja [LICENSE](LICENSE).
+
+---
+
+**Sem custos. Sem APIs. 100% local.**
