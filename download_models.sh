@@ -1,47 +1,26 @@
 #!/bin/bash
 #
-# Script para baixar TODOS os modelos de IA
-# Execute: bash download_models.sh
+# Script para baixar FLUX.1 Schnell
+# Execute: bash download_modelo.sh
 #
-# Tamanho total: ~10GB
+# Tamanho: ~4GB
 #
 
-set -e
+PASTA="modelo_cache"
 
-PASTA_MODELOS="modelo_cache"
-mkdir -p "$PASTA_MODELOS"
+if [ -d "$PASTA" ]; then
+    echo "✅ Modelo já existe: $PASTA"
+    exit 0
+fi
 
-echo "📦 Baixando todos os modelos..."
-echo "Tamanho total: ~10GB"
+echo "📦 Baixando FLUX.1-schnell (~4GB)..."
+mkdir -p "$PASTA"
+
+huggingface-cli download black-forest-labs/FLUX.1-schnell \
+    --local-dir "$PASTA" \
+    --local-use-symlinks False
+
+echo "✅ Salvo em: $PASTA"
 echo ""
-
-# Modelos disponíveis
-MODELOS=(
-    "stabilityai/sdxl-turbo:sdxl-turbo"
-    "stabilityai/stable-diffusion-xl-base-1.0:sdxl-base"
-    "black-forest-labs/FLUX.1-schnell:flux-schnell"
-)
-
-for item in "${MODELOS[@]}"; do
-    repo_id="${item%%:*}"
-    nome="${item##*:}"
-    
-    pasta="$PASTA_MODELOS/$nome"
-    
-    if [ -d "$pasta" ]; then
-        echo "✅ $nome já existe"
-    else
-        echo "📦 Baixando $nome..."
-        huggingface-cli download "$repo_id" \
-            --local-dir "$pasta" \
-            --local-use-symlinks False
-        echo "✅ $nome salvo!"
-    fi
-done
-
-echo ""
-echo "✅ Todos os modelos salvos em: $PASTA_MODELOS/"
-echo ""
-echo "Para usar no projeto:"
-echo "  basic:  modelo_local = './modelo_cache/sdxl-turbo'"
-echo "  pro:    modelo_local = './modelo_cache/flux-schnell'"
+echo "Para usar:"
+echo "  modelo_local = './modelo_cache'"
