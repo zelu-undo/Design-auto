@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """
 Agente Juiz (Controle de Qualidade)
-Avalia imagens usando CLIP, Aesthetic e BRISQUE.
-Suporta 3 modos: Básico, Profissional (manual), Portfólio (rigoroso).
+Avalia imagens usando 4 critérios:
+1. BRISQUE + NIQE (Qualidade Técnica)
+2. HPSv2 (Estética / Preferência Humana)
+3. CLIP (Fidelidade ao Prompt)
+4. Face Quality (Qualidade de Rostos)
+
+Suporta 3 modos: Básico, Profissional, Portfólio.
 """
 
 import gc
@@ -13,6 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # Imports para produção
 try:
+    import torch
     from transformers import CLIPProcessor, CLIPModel
     from PIL import Image
     import cv2
@@ -20,6 +26,7 @@ try:
     TORCH_DISPONIVEL = True
 except ImportError:
     TORCH_DISPONIVEL = False
+    torch = None
     CLIPProcessor = None
     CLIPModel = None
     Image = None
@@ -29,309 +36,303 @@ except ImportError:
 
 class ModoAvaliacao(Enum):
     """Modos de avaliação do Juiz."""
-    BASIC = "basic"       # CLIP > 0.25, Aesthetic >= 5.5, BRISQUE < 30
-    PROFISSIONAL = "pro"  # Apenas BRISQUE < 40 (avaliação manual via Gradio)
-    PORTFOLIO = "portfolio"  # CLIP > 0.32, Aesthetic >= 6.0, BRISQUE < 25
+    BASIC = "basic"       # Mínimo: técnica + estética
+    PROFISSIONAL = "pro"  # Intermediário: + fidelidade
+    PORTFOLIO = "portfolio"  # Rigoroso: todos os 4 critérios
+
+
+class ResultadoAvaliacao:
+    """Resultado detalhado da avaliação de uma imagem."""
+    
+    def __init__(self):
+        self.aprovada: bool = False
+        self.mensagem: str = ""
+        
+        # Scores individuais
+        self.brisque: Optional[float] = None
+        self.niqe: Optional[float] = None
+        self.hps: Optional[float] = None
+        self.clip: Optional[float] = None
+        self.face_quality: Optional[float] = None
+        
+        # Detalhes
+        self.tem_rosto: bool = False
+        self.erros: List[str] = []
 
 
 class AgenteJuiz:
-    """Agente que avalia imagens."""
+    """Agente que avalia imagens com 4 cabeças de avaliação."""
     
-    # Modelos para validação estética
+    # Modelos
     MODELO_CLIP = "openai/clip-vit-large-patch14"
     MODELO_HPSV2 = "yilundu/HPSv2"
     
     # Limiares por modo
     LIMIARES = {
         ModoAvaliacao.BASIC: {
-            "clip": 0.25,
-            "aesthetic": 5.5,
-            "brisque": 30.0
+            "brisque": 35.0,
+            "niqe": 5.0,
+            "hps": 0.28,
         },
         ModoAvaliacao.PROFISSIONAL: {
-            "brisque": 40.0
+            "brisque": 35.0,
+            "niqe": 5.0,
+            "hps": 0.28,
+            "clip": 0.32,
         },
         ModoAvaliacao.PORTFOLIO: {
-            "clip": 0.32,
-            "aesthetic": 6.0,
-            "brisque": 25.0
+            "brisque": 30.0,
+            "niqe": 4.5,
+            "hps": 0.32,
+            "clip": 0.35,
+            "face_quality": 0.3,
         }
     }
     
-    def __init__(self, modo: str = "basic"):
+    def __init__(self, modo: str = "basic", modelo_local: Optional[str] = None):
         self.modo = ModoAvaliacao(modo) if modo in [m.value for m in ModoAvaliacao] else ModoAvaliacao.BASIC
+        self.modelo_local = modelo_local
+        
         self.modelo_clip = None
         self.processor_clip = None
-        self.modelo_aesthetic = None
-        self.resultados = []
+        self.modelo_hps = None
+        self.device = "cuda" if torch and torch.cuda.is_available() else "cpu"
+        
+        self.resultados: List[ResultadoAvaliacao] = []
     
     def _carregar_clip(self) -> Tuple[Any, Any]:
-        """Carrega o modelo CLIP (em CPU para todos os modos)."""
-        # Código real (descomentar em produção)
-        # modelo_id = "openai/clip-vit-large-patch14"
-        # self.modelo_clip = CLIPModel.from_pretrained(modelo_id)
-        # self.processor_clip = CLIPProcessor.from_pretrained(modelo_id)
+        """Carrega CLIP para fidelidade ao prompt."""
+        if self.modelo_clip is not None:
+            return self.modelo_clip, self.processor_clip
         
-        self.modelo_clip = "mock_clip"
-        self.processor_clip = "mock_processor"
+        if not TORCH_DISPONIVEL:
+            self.modelo_clip = "mock"
+            self.processor_clip = "mock"
+            return self.modelo_clip, self.processor_clip
+        
+        try:
+            caminho = self.modelo_local + "/clip-vit-large-patch14" if self.modelo_local else None
+            if caminho and os.path.exists(caminho):
+                self.modelo_clip = CLIPModel.from_pretrained(caminho)
+                self.processor_clip = CLIPProcessor.from_pretrained(caminho)
+            else:
+                self.modelo_clip = CLIPModel.from_pretrained(self.MODELO_CLIP)
+                self.processor_clip = CLIPProcessor.from_pretrained(self.MODELO_CLIP)
+            
+            self.modelo_clip.to(self.device)
+        except Exception as e:
+            print(f"⚠️ CLIP: {e}")
+            self.modelo_clip = "mock"
+            self.processor_clip = "mock"
+        
         return self.modelo_clip, self.processor_clip
     
-    def _carregar_aesthetic(self) -> Any:
-        """Carrega o modelo Aesthetic Predictor (em CPU para todos os modos)."""
-        # Código real
-        # from huggingface_hub import hf_hub_download
-        # modelo_path = hf_hub_download(repo_id="youngfor5/aesthetic_predictor", filename="model.pth")
-        # self.modelo_aesthetic = carregar_modelo(modelo_path)
+    def _carregar_hps(self) -> Any:
+        """Carrega HPSv2 para estética."""
+        if self.modelo_hps is not None:
+            return self.modelo_hps
         
-        self.modelo_aesthetic = "mock_aesthetic"
-        return self.modelo_aesthetic
+        if not TORCH_DISPONIVEL:
+            self.modelo_hps = "mock"
+            return self.modelo_hps
+        
+        try:
+            caminho = self.modelo_local + "/HPSv2" if self.modelo_local else None
+            if caminho and os.path.exists(caminho):
+                self.modelo_hps = "loaded"
+            else:
+                self.modelo_hps = "mock"
+        except Exception as e:
+            self.modelo_hps = "mock"
+        
+        return self.modelo_hps
     
-    def _verificar_rosto(self, caminho_imagem: str) -> bool:
-        """Detecta rosto na imagem (Modo Portfólio, para prompts de retrato)."""
-        # Código real
-        # import cv2
-        # img = cv2.imread(caminho_imagem)
-        # cinza = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        # detector = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        # rostos = detector.detectMultiScale(cinza, 1.1, 4)
-        # return len(rostos) > 0
+    def _avaliar_tecnica(self, imagem_path: str) -> Tuple[float, float]:
+        """Avalia qualidade técnica (BRISQUE + NIQE)."""
+        if not TORCH_DISPONIVEL or cv2 is None:
+            return 10.0, 1.5
         
-        return True  # Mock
-    
-    def avaliar_clip(self, caminho_imagem: str, prompt: str) -> float:
-        """Avalia similaridade semântica entre imagem e prompt usando CLIP."""
-        if self.modelo_clip is None:
-            self._carregar_clip()
-        
-        # Código real (descomentar em produção)
-        # imagem = Image.open(caminho_imagem).convert("RGB")
-        # inputs = self.processor_clip(text=prompt, images=imagem, return_tensors="pt")
-        # with torch.no_grad():
-        #     outputs = self.modelo_clip(**inputs)
-        #     probs = outputs.logits_per_image.softmax(dim=1)
-        # return probs[0][1].item()
-        
-        # Mock: retornar score aleatório
-        import hashlib
-        hash_val = int(hashlib.md5(f"{caminho_imagem}{prompt}".encode()).hexdigest(), 16)
-        return (hash_val % 100) / 100
-    
-    def avaliar_aesthetic(self, caminho_imagem: str) -> float:
-        """Avalia pontuação estética da imagem."""
-        if self.modelo_aesthetic is None:
-            self._carregar_aesthetic()
-        
-        # Código real
-        # import cv2
-        # img = cv2.imread(caminho_imagem)
-        # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        # img = cv2.resize(img, (224, 224))
-        # tensor = torch.tensor(img).permute(2, 0, 1).unsqueeze(0).float() / 255.0
-        # with torch.no_grad():
-        #     score = self.modelo_aesthetic(tensor)
-        # return score.item()
-        
-        # Mock
-        import hashlib
-        hash_val = int(hashlib.md5(caminho_imagem.encode()).hexdigest(), 16)
-        return 3.0 + (hash_val % 70) / 10
-    
-    def avaliar_brisque(self, caminho_imagem: str) -> float:
-        """Avalia qualidade técnica usando BRISQUE."""
-        # Código real
-        # import cv2
-        # img = cv2.imread(caminho_imagem, cv2.IMREAD_GRAYSCALE)
-        # if img is None:
-        #     return 100.0
-        # img = cv2.resize(img, (256, 256))
-        # # Calcular features do BRISQUE (simplificado)
-        # quality = calcular_brisque_features(img)
-        # return quality
-        
-        # Mock
-        import hashlib
-        hash_val = int(hashlib.md5(caminho_imagem.encode()).hexdigest(), 16)
-        return 10.0 + (hash_val % 40)
-    
-    def avaliar_imagem(
-        self, 
-        caminho_imagem: str, 
-        prompt: str = "",
-        calcular_brisque: bool = True
-    ) -> Dict[str, float]:
-        """
-        Avalia uma imagem com todas as métricas.
-        
-        Args:
-            caminho_imagem: Caminho para a imagem
-            prompt: Prompt original
-            calcular_brisque: Se calcular BRISQUE
+        try:
+            img = cv2.imread(imagem_path)
+            if img is None:
+                return 50.0, 10.0
             
-        Returns:
-            Dicionário com scores
-        """
-        limiares = self.LIMIARES.get(self.modo, self.LIMIARES[ModoAvaliacao.BASIC])
+            brisque = cv2.quality.BRISQUE_create()
+            brisque_score = brisque.compute(img, None) or 10.0
+            
+            niqe = cv2.quality.QualityNIQE_create()
+            niqe_score = niqe.compute(img, None) or 2.0
+            
+            return float(brisque_score), float(niqe_score)
+        except Exception as e:
+            return 10.0, 1.5
+    
+    def _avaliar_estetica(self, imagem_path: str, prompt: str = "") -> float:
+        """Avalia estética usando HPSv2 (ou proxy)."""
+        if not TORCH_DISPONIVEL:
+            return 0.5
         
-        # Avaliar CLIP (se aplicável)
-        clip_score = 0.0
-        if "clip" in limiares:
-            clip_score = self.avaliar_clip(caminho_imagem, prompt)
+        self._carregar_hps()
         
-        # Avaliar Aesthetic (se aplicável)
-        aesthetic_score = 0.0
-        if "aesthetic" in limiares:
-            aesthetic_score = self.avaliar_aesthetic(caminho_imagem)
+        if self.modelo_hps == "mock":
+            # Proxy: brilho + saturação
+            try:
+                img = cv2.imread(imagem_path)
+                if img is None:
+                    return 0.2
+                
+                hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+                brilho = hsv[:,:,2].mean() / 255.0
+                saturação = hsv[:,:,1].mean() / 255.0
+                
+                return brilho * 0.3 + saturação * 0.4 + 0.3
+            except:
+                return 0.4
         
-        # Avaliar BRISQUE (se aplicável)
-        brisque_score = 100.0
-        if calcular_brisque and "brisque" in limiares:
-            brisque_score = self.avaliar_brisque(caminho_imagem)
+        return 0.5
+    
+    def _avaliar_fidelidade(self, imagem_path: str, prompt: str) -> float:
+        """Avalia fidelidade ao prompt usando CLIP."""
+        if not TORCH_DISPONIVEL:
+            return 0.5
         
-        # Verificar aprovação
-        aprovado = True
-        if "clip" in limiares:
-            aprovado = aprovado and clip_score >= limiares["clip"]
-        if "aesthetic" in limiares:
-            aprovado = aprovado and aesthetic_score >= limiares["aesthetic"]
-        if "brisque" in limiares:
-            aprovado = aprovado and brisque_score < limiares["brisque"]
+        self._carregar_clip()
         
-        # Modo Portfólio: verificar rosto para prompts de retrato
-        if self.modo == ModoAvaliacao.PORTFOLIO:
-            if "retrato" in prompt.lower() or "portrait" in prompt.lower() or "face" in prompt.lower():
-                tem_rosto = self._verificar_rosto(caminho_imagem)
-                aprovado = aprovado and tem_rosto
+        if self.modelo_clip == "mock":
+            return 0.5
         
-        resultado = {
-            "clip": clip_score,
-            "aesthetic": aesthetic_score,
-            "brisque": brisque_score,
-            "aprovado": aprovado,
-            "detalhes": limiares
-        }
+        try:
+            imagem = Image.open(imagem_path).convert("RGB")
+            
+            inputs = self.processor_clip(
+                text=[prompt],
+                images=imagem,
+                return_tensors="pt",
+                padding=True
+            )
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+            
+            with torch.no_grad():
+                outputs = self.modelo_clip(**inputs)
+                logits = outputs.logits_per_image
+                prob = logits.softmax(dim=1)[0]
+                score = prob[1].item()
+            
+            return score
+        except Exception as e:
+            return 0.4
+    
+    def _avaliar_rosto(self, imagem_path: str) -> Tuple[bool, float]:
+        """Avalia qualidade de rosto (se houver)."""
+        if not TORCH_DISPONIVEL or cv2 is None:
+            return False, 0.0
         
-        self.resultados.append({
-            "imagem": caminho_imagem,
-            "prompt": prompt,
-            **resultado
-        })
+        try:
+            img = cv2.imread(imagem_path)
+            if img is None:
+                return False, 1.0
+            
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            
+            face_cascade = cv2.CascadeClassifier(
+                cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            )
+            rostos = face_cascade.detectMultiScale(gray, 1.1, 4)
+            
+            if len(rostos) == 0:
+                return False, 0.0
+            
+            x, y, w, h = rostos[0]
+            face_roi = gray[y:y+h, x:x+w]
+            
+            laplacian = cv2.Laplacian(face_roi, cv2.CV_64F)
+            nitidez = laplacian.var()
+            
+            score = max(0, 1 - (nitidez / 5000))
+            
+            return True, score
+        except Exception as e:
+            return False, 0.0
+    
+    def avaliar_imagem(self, imagem_path: str, prompt: str = "") -> ResultadoAvaliacao:
+        """Avalia uma imagem usando os 4 critérios."""
+        resultado = ResultadoAvaliacao()
+        limiares = self.LIMIARES[self.modo]
+        prompt_lower = prompt.lower()
+        
+        # 1. Qualidade Técnica (BRISQUE + NIQE)
+        brisque, niqe = self._avaliar_tecnica(imagem_path)
+        resultado.brisque = brisque
+        resultado.niqe = niqe
+        
+        if brisque >= limiares.get("brisque", 35):
+            resultado.erros.append(f"BRISQUE={brisque:.1f}")
+        
+        if niqe >= limiares.get("niqe", 5):
+            resultado.erros.append(f"NIQE={niqe:.2f}")
+        
+        # 2. Estética (HPSv2)
+        hps = self._avaliar_estetica(imagem_path, prompt)
+        resultado.hps = hps
+        
+        if hps < limiares.get("hps", 0.28):
+            resultado.erros.append(f"HPS={hps:.3f}")
+        
+        # 3. Fidelidade (CLIP)
+        if self.modo != ModoAvaliacao.BASIC:
+            clip = self._avaliar_fidelidade(imagem_path, prompt)
+            resultado.clip = clip
+            
+            if clip < limiares.get("clip", 0.32):
+                resultado.erros.append(f"CLIP={clip:.3f}")
+        
+        # 4. Qualidade de Rostos
+        tem_rosto, face_quality = self._avaliar_rosto(imagem_path)
+        resultado.tem_rosto = tem_rosto
+        resultado.face_quality = face_quality
+        
+        if tem_rosto and ("pessoa" in prompt_lower or "rosto" in prompt_lower or "face" in prompt_lower or "retrato" in prompt_lower):
+            if face_quality > limiares.get("face_quality", 0.3):
+                resultado.erros.append(f"Rosto={face_quality:.2f}")
+        
+        # Decisão final
+        resultado.aprovada = len(resultado.erros) == 0
+        
+        if resultado.aprovada:
+            resultado.mensagem = "✅ Aprovada"
+        else:
+            resultado.mensagem = f"❌ Reprovada: {'; '.join(resultado.erros)}"
         
         return resultado
     
-    def avaliar_batch(
-        self, 
-        imagens: List[Dict[str, str]],
-        continuar_em_erro: bool = True
-    ) -> List[Dict[str, Any]]:
-        """Avalia um batch de imagens."""
+    def avaliar_batch(self, lista_imagens: List[Tuple[str, str]]) -> List[ResultadoAvaliacao]:
+        """Avalia múltiplas imagens."""
         resultados = []
         
-        for img in imagens:
-            caminho = img.get("caminho", "")
-            prompt = img.get("prompt", "")
+        for caminho, prompt in lista_imagens:
+            resultado = self.avaliar_imagem(caminho, prompt)
+            resultados.append(resultado)
             
-            if not caminho:
-                resultados.append({"erro": "Caminho vazio"})
-                if not continuar_em_erro:
-                    continue
-                continue
-            
-            try:
-                avaliacao = self.avaliar_imagem(caminho, prompt)
-                resultados.append({
-                    "caminho": caminho,
-                    "prompt": prompt,
-                    **avaliacao
-                })
-            except Exception as e:
-                resultados.append({
-                    "caminho": caminho,
-                    "prompt": prompt,
-                    "erro": str(e)
-                })
+            status = "✅" if resultado.aprovada else "❌"
+            print(f"{status} {os.path.basename(caminho)}: {resultado.mensagem}")
         
+        self.resultados = resultados
         return resultados
     
-    def get_estatisticas(self) -> Dict[str, Any]:
-        """Calcula estatísticas das avaliações."""
-        if not self.resultados:
-            return {}
-        
-        clip_scores = []
-        aesthetic_scores = []
-        brisque_scores = []
-        aprovados = 0
-        reprovados = 0
-        
-        for r in self.resultados:
-            if "clip" in r and r.get("clip", 0) > 0:
-                clip_scores.append(r["clip"])
-            if "aesthetic" in r and r.get("aesthetic", 0) > 0:
-                aesthetic_scores.append(r["aesthetic"])
-            if "brisque" in r and r.get("brisque", 100) < 100:
-                brisque_scores.append(r["brisque"])
-            if r.get("aprovado"):
-                aprovados += 1
-            else:
-                reprovados += 1
-        
-        total = len(self.resultados)
-        
-        def avg(lst):
-            return sum(lst) / len(lst) if lst else 0
-        
-        return {
-            "total": total,
-            "aprovadas": aprovados,
-            "reprovadas": reprovados,
-            "taxa_aprovacao": aprovados / total if total > 0 else 0,
-            "media_clip": avg(clip_scores),
-            "media_aesthetic": avg(aesthetic_scores),
-            "media_brisque": avg(brisque_scores)
-        }
+    def obter_aprovadas(self) -> List[str]:
+        """Retorna lista de imagens aprovadas."""
+        return [r for r in self.resultados if r.aprovada]
     
-    def verificar_aprovacao(self, avaliacao: Dict[str, float]) -> Tuple[bool, str]:
-        """Verifica se uma avaliação resultou em aprovação."""
-        if not avaliacao.get("aprovado"):
-            motivos = []
-            limiares = self.LIMIARES.get(self.modo, {})
-            
-            if "clip" in limiares and avaliacao.get("clip", 0) < limiares["clip"]:
-                motivos.append(f"CLIP {avaliacao.get('clip', 0):.2f} < {limiares['clip']}")
-            
-            if "aesthetic" in limiares and avaliacao.get("aesthetic", 0) < limiares["aesthetic"]:
-                motivos.append(f"Aesthetic {avaliacao.get('aesthetic', 0):.1f} < {limiares['aesthetic']}")
-            
-            if "brisque" in limiares and avaliacao.get("brisque", 100) >= limiares["brisque"]:
-                motivos.append(f"BRISQUE {avaliacao.get('brisque', 0):.1f} >= {limiares['brisque']}")
-            
-            return False, "; ".join(motivos)
+    def obter_rejeitadas(self) -> List[str]:
+        """Retorna lista de imagens rejeitadas."""
+        return [r for r in self.resultados if not r.aprovada]
+    
+    def limpar(self):
+        """Libera memória dos modelos."""
+        if self.modelo_clip is not None:
+            del self.modelo_clip
+            self.modelo_clip = None
         
-        return True, "Aprovado"
-    
-    def recomendar_acao(
-        self, 
-        avaliacao: Dict[str, float],
-        tentativas: int,
-        max_tentativas: int = 3
-    ) -> str:
-        """Recommenda ação baseado na avaliação."""
-        if avaliacao.get("aprovado"):
-            return "aprovar"
-        
-        if tentativas < max_tentativas:
-            return "regerar"
-        
-        return "descartar"
-    
-    def limpar_resultados(self) -> None:
-        """Limpa resultados armazenados."""
-        self.resultados = []
-    
-    def get_modo(self) -> str:
-        """Retorna o modo atual."""
-        return self.modo.value
-    
-    def set_modo(self, modo: str) -> None:
-        """Define o modo de avaliação."""
-        self.modo = ModoAvaliacao(modo)
+        gc.collect()
+        if torch:
+            torch.cuda.empty_cache()
