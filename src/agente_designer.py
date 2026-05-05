@@ -12,9 +12,16 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-# Imports para produção
-import torch
-from diffusers import StableDiffusionXLPipeline, FluxPipeline
+# Imports para produção (com fallback)
+try:
+    import torch
+    from diffusers import StableDiffusionXLPipeline, FluxPipeline
+    TORCH_DISPONIVEL = True
+except ImportError:
+    TORCH_DISPONIVEL = False
+    torch = None
+    StableDiffusionXLPipeline = None
+    FluxPipeline = None
 
 
 class ModoDesigner(Enum):
@@ -90,6 +97,12 @@ class AgenteDesigner:
         """Inicializa o pipeline do modelo selecionado."""
         if modelo is None:
             modelo = self._obter_modelo()
+        
+        # Verificar se torch está disponível
+        if not TORCH_DISPONIVEL:
+            raise RuntimeError(
+                "PyTorch não está instalado. Execute: pip install torch diffusers"
+            )
         
         if not self._verificar_disponibilidade_vram():
             raise RuntimeError(
@@ -190,7 +203,7 @@ class AgenteDesigner:
             negativo = "low quality, blurry, ugly, deformed, watermark, signature"
         
         # Gerar imagem usando IA real
-        if self.pipeline and hasattr(self.pipeline, '__call__'):
+        if TORCH_DISPONIVEL and self.pipeline and hasattr(self.pipeline, '__call__'):
             generator = torch.Generator(device=self.device).manual_seed(seed)
             imagem = self.pipeline(
                 prompt=prompt,

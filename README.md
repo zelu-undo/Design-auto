@@ -139,13 +139,18 @@ python main.py -p projeto -b "Logo" --modo pro
 # Abre automaticamente em: http://localhost:7860
 ```
 
-## ☁️ Google Colab
+## ☁️ Google Colab (1 Clique!)
 
-### Um Clique
+### Como usar:
 
-Abra o notebook direto no Colab:
+1. Clique no link: https://colab.research.google.com/github.com/zelu-undo/Design-auto/blob/main/colab.ipynb
 
-https://colab.research.google.com/github.com/zelu-undo/Design-auto/blob/main/colab.ipynb
+2. Configure:
+   - **Nome do projeto**:ologo_logistica
+   - **Descreva sua ideia**:Logo moderno azul para empresa detransporte
+   - **Quantas imagens**:3
+
+3. Execute as células em ordem (1 a 5)
 
 ### Configurações Recomendadas
 
