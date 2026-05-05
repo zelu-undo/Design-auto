@@ -224,12 +224,17 @@ class AgenteDesigner:
             draw = ImageDraw.Draw(img)
             
             for i in range(5):
-                x1 = random.randint(0, largura)
-                y1 = random.randint(0, altura)
-                x2 = random.randint(0, largura)
-                y2 = random.randint(0, altura)
+                x1 = random.randint(0, largura - 1)
+                y1 = random.randint(0, altura - 1)
+                x2 = random.randint(0, largura - 1)
+                y2 = random.randint(0, altura - 1)
+                # Garantir coordenadas ordenadas
+                left = min(x1, x2)
+                right = max(x1, x2)
+                top = min(y1, y2)
+                bottom = max(y1, y2)
                 cor = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-                draw.rectangle([x1, y1, x2, y2], outline=cor, width=3)
+                draw.rectangle([left, top, right, bottom], outline=cor, width=3)
             
             return img
         except ImportError:
