@@ -1,139 +1,81 @@
-# 🏭 ArtisanAI Studio – Fábrica de Design Autônoma (Edição Colab)
+# 🏭 ArtisanAI Studio – Fábrica de Design Autônoma 100% Local (Edição Colab)
 
-Versão aprimorada, modular e totalmente funcional no Google Colab, com alternativas gratuitas e avaliação de qualidade robusta.
+Versão **totalmente gratuita e independente de APIs**, rodando inteiramente sobre modelos open‑source na GPU do Google Colab (T4). Projetada para ser resiliente a interrupções e com memória de longo prazo via persistência de estado em arquivos.
 
 ## Visão Geral
 
-O **ArtisanAI Studio** é um pipeline de IA que transforma um briefing de design em imagens prontas para uso profissional, operando como uma linha de produção automatizada. Esta edição foi adaptada para rodar integralmente no ambiente gratuito do Google Colab, utilizando modelos open-source e APIs com tier gratuito.
+O **ArtisanAI Studio** é um pipeline de IA que transforma um briefing de design em imagens prontas para uso profissional, operando como uma linha de produção automatizada. **Esta edição não exige nenhuma chave de API**, usando exclusivamente modelos locais gerenciados dinamicamente para respeitar os limites de VRAM da GPU T4. Todo o conhecimento gerado durante o processo (guia de estilo, prompts, imagens aprovadas, relatórios) é salvo automaticamente no Google Drive, funcionando como uma **memória de longo prazo** que permite retomada e análise histórica.
 
-## Arquitetura (4 Agentes + Orquestrador Aprimorado)
+## Arquitetura (4 Agentes + Orquestrador + Gerenciador de Estado)
 
-### 1. Agente Analisador de Estilo
+### 0. Gerenciador de Estado (a “memória” do projeto)
+- Arquivo `projeto_estado.json` armazena metadados, etapa atual, guias intermediários, lista de prompts gerados, URLs das imagens salvas e avaliações.
+- Toda vez que um agente termina sua tarefa, ele escreve seus resultados **imediatamente** no JSON, antes de ser descarregado da GPU.
+- O Orquestrador só carrega o modelo da etapa seguinte após confirmar que o estado foi salvo. Se a sessão cair, ao reabrir o notebook basta recarregar o estado para continuar exatamente de onde parou.
+
+### 1. Agente Analisador de Estilo (Local)
 - **Entrada aceita**: 
-  - Briefing textual (modo fictício)
-  - Upload de 3 a 10 imagens de referência (modo real) – sem dependência de Instagram ou scraping.
-- **Função**: Extrai paleta de cores dominantes, estilos tipográficos, iluminação e mood, gerando um guia de estilo estruturado (JSON).
-- **Tecnologia**: 
-  - **Modo texto**: Llama 3 (8B) via API Groq (gratuita, 30 req/min).
-  - **Modo imagem**: LLaVA 1.6 (via Ollama no Colab) ou GPT-4o-mini (pago, opcional para qualidade superior).
+  - Briefing textual (modo fictício).
+  - Upload de 3 a 10 imagens de referência (modo real).
+- **Função**: Extrai paleta de cores, estilos tipográficos, iluminação e mood → `style_guide.json`.
+- **Tecnologia**:
+  - **Modo imagem + texto**: **LLaVA 1.6 (Mistral 7B)** via `ollama` no Colab. Usa a mesma instância para processar tanto as imagens de referência quanto o briefing textual, gerando um JSON estruturado.
+  - **Modo apenas texto** (se não houver imagens): **Gemma 2 (2B)** via `ollama`, mais leve e rápido.
+- **Persistência**: O guia de estilo é salvo em `projetos/<nome_projeto>/style_guide.json` e referenciado no `projeto_estado.json`.
 
-### 2. Agente Prompter (Diretor de Arte)
-- **Função**: Converter o guia de estilo em N prompts profissionais para o gerador de imagens.
-- Cada prompt inclui: paleta de cores, iluminação, composição, elementos, formato (1:1 feed, 9:16 stories), texturas, palavras-chave de qualidade (`8k, highly detailed, professional photography`).
-- **Margem de segurança**: Gera `N * 1.5` prompts (ex: para 5 imagens, gera 8 prompts).
-- **Tecnologia**: Llama 3 via Groq (prompt engineering com few-shot).
+### 2. Agente Prompter (Diretor de Arte Local)
+- **Função**: Converter o guia de estilo em `N * 1.5` prompts profissionais (margem de segurança).
+- **Tecnologia**: **Gemma 2 (9B)** via `ollama` (carregado temporariamente após descarregar o Analisador).
+- **Saída**: `prompts.json`, uma lista de objetos com `prompt`, `formato`, `seed` opcional.
+- **Cache inteligente**: Prompts aprovados em projetos anteriores são reaproveitados se o guia de estilo for similar (similaridade de cosseno entre vetores de estilo).
 
 ### 3. Agente Designer (Artista Digital)
-- **Opção principal (gratuita)**: **Flux.1 Dev** rodando localmente via `diffusers` na GPU T4 do Colab.  
-  - Geração rápida (~10s/imagem) com excelente qualidade estética.
-  - Suporte a texto em português limitado – compensado por prompts descritivos (evitar texto na imagem).  
-- **Alternativa paga (recomendada para produção)**: API Recraft V3 (~US$0,04/img), excelente com texto.
-- **Cache de prompts**: Prompts já aprovados são salvos em cache para acelerar projetos futuros.
+- **Tecnologia**: **Flux.1 Dev** via `diffusers`, carregado localmente na GPU T4.
+  - Otimizações: `enable_attention_slicing()`, `enable_vae_slicing()`, `torch.bfloat16`.
+  - Resolução padrão: 1024×1024 para feed, 576×1024 para stories.
+- **Cache de prompts**: Imagens geradas com sucesso têm seus prompts marcados como `aprovado` no estado para acelerar futuras execuções.
 
-### 4. Agente Juiz (Controle de Qualidade Multicritério)
-Avaliação em três camadas (gratuitas, locais):
-1. **CLIP Score** (OpenAI CLIP ViT-L/14) – correspondência texto-imagem.
-2. **LAION Aesthetic Predictor** – pontuação estética (treinado em preferências humanas).
-3. **Detector de artefatos** – heurísticas de borramento, baixa resolução, distorções faciais (usando MediaPipe ou CLIP interrogator).
-- **Regra de aprovação**: CLIP > 0.25 **e** Aesthetic > 5.0 **e** sem artefatos graves.
-- **Fallback inteligente**: Se uma imagem falha, o Designer gera uma variação com seed diferente (até 3 tentativas), depois troca o prompt se ainda falhar.
+### 4. Agente Juiz (Controle de Qualidade 100% Local)
+Três avaliadores independentes (não precisam de GPU simultaneamente):
+1. **CLIP ViT‑L/14** (do OpenAI, modelo local via `transformers`) – calcula a similaridade semântica entre prompt e imagem.
+2. **Aesthetic Predictor** (modelo leve baseado em ViT) – pontuação estética (0–10).
+3. **BRISQUE** (via `opencv-python`) – detecta borramento, ruído e artefatos de compressão.
+- **Regra de aprovação**: CLIP > 0.25 **e** Aesthetic ≥ 5.5 **e** BRISQUE < 30.
+- **Fallback**: Até 3 variações por prompt, depois descarta o prompt e solicita um novo ao Prompter (que pode ser reativado se necessário).
 
-### O Orquestrador (Maestro)
-- Gerencia a fila: Analisador → Prompter → Designer → Juiz.
-- Implementa **controle de orçamento** (se usar API paga) e **retomada de sessão** (salva estado em JSON).
+### Orquestrador (Maestro)
+- Gerencia o pipeline sequencialmente, decidindo qual modelo carregar/descarregar a cada etapa.
+- Lê e escreve `projeto_estado.json` antes de cada transição.
 - Barra de progresso com `tqdm`.
-- Modo **“revisão humana”** opcional: exibe as imagens geradas e pede ao usuário para aprovar/rejeitar (interface Gradio simples dentro do Colab).
-- Gera relatório detalhado e salva as imagens aprovadas em uma pasta do Google Drive (montado).
+- Modo **“revisão humana”** via interface Gradio: exibe as imagens geradas no navegador e pede aprovação explícita do usuário (o feedback é registrado no histórico).
+- Gera relatório final em Markdown.
 
-## Fluxo de Trabalho Detalhado
+## Fluxo de Trabalho Detalhado (com memória persistente)
 
-1. Usuário fornece briefing e faz upload de imagens de referência (se desejar).
-2. **Analisador** processa os dados e gera o `style_guide.json`.
-3. **Prompter** gera uma lista de prompts (excesso de 50%).
-4. **Designer** produz cada imagem em lotes de 1 (GPU limitada no Colab).
-5. **Juiz** avalia. Se aprovada, salva e incrementa contador de sucesso; se rejeitada, tenta novamente com mesmo prompt (máx. 3 variações) e depois troca o prompt.
-6. Quando o número alvo de imagens aprovadas é atingido, o Orquestrador encerra a linha, exibe estatísticas e opcionalmente envia notificação (ex: email via `smtplib`).
+1. Usuário fornece briefing e faz upload de imagens (se desejar).
+2. Orquestrador verifica se existe um estado anterior; se sim, pergunta se deseja retomar ou iniciar novo projeto.
+3. **Analisador** é carregado (LLaVA ou Gemma), processa entrada, salva `style_guide.json` e **atualiza `projeto_estado.json`** com etapa concluída.
+4. Analisador é descarregado da GPU.
+5. **Prompter** é carregado, lê o guia de estilo, gera prompts, salva `prompts.json` e atualiza estado.
+6. Prompter é descarregado.
+7. **Designer** é carregado. Para cada prompt, gera imagem, que é imediatamente salva no Drive (como `.png` temporário).
+8. **Juiz** avalia a imagem. Se aprovada, move para a pasta `imagens_aprovadas` e registra no estado.
+9. Se o número desejado de imagens aprovadas for atingido, o Orquestrador encerra.
+10. Se a execução for interrompida, ao reabrir o notebook o Orquestrador lê o estado, recarrega o modelo da etapa pendente e continua exatamente da última imagem não processada.
 
-## Executando no Google Colab (passo a passo)
+## Gerenciamento de Memória da GPU
 
-### Pré‑requisitos
-- Conta Google (Google Drive para salvar resultados).
-- API Key gratuita da Groq (https://console.groq.com) – necessário para Analisador e Prompter.
-- (Opcional) API Key OpenAI se quiser usar GPT-4o-mini para qualidade extra.
+Como a T4 tem ~15 GB de VRAM, carregamos apenas um modelo pesado por vez. Para isso:
 
-### Notebook Colab
-Disponibilizei um notebook completo em [link futuro] com todas as células. Abaixo, a estrutura lógica que ele segue:
+- **Analisador (LLaVA 13B)**: ocupa ~8 GB em 4‑bit (via `bitsandbytes`). Descarregado logo após gerar o JSON.
+- **Prompter (Gemma 2 9B)**: ~6 GB em 4‑bit. Descarregado após gerar prompts.
+- **Designer (Flux.1 Dev)**: ~12 GB (com atenção slicing). Permanece ativo durante toda a etapa de geração.
+- **Juiz (CLIP + Aesthetic)**: modelos leves (~2 GB combinados), podem ser carregados junto com o Designer ou em sequência.
 
+Script de descarregamento:
 ```python
-# ⚙️ Instalação de dependências (executar apenas uma vez)
-!pip install -q diffusers transformers accelerate torch torchvision pillow tqdm gradio openai groq
-!pip install -q git+https://github.com/openai/CLIP.git
-# Para LAION aesthetic predictor:
-!pip install -q aesthetics-predictor
-Monte o Google Drive para persistência:
-
-python
-from google.colab import drive
-drive.mount('/content/drive')
-Configure chaves (use getpass para segurança):
-
-python
-import os, getpass
-os.environ["GROQ_API_KEY"] = getpass.getpass("Chave Groq: ")
-# Opcional: os.environ["OPENAI_API_KEY"] = ...
-Implemente cada agente em uma classe Python dentro do notebook (células separadas para organização). Exemplo do Agente Designer com Flux.1 Dev:
-
-python
-import torch
-from diffusers import FluxPipeline
-
-pipe = FluxPipeline.from_pretrained("black-forest-labs/FLUX.1-dev", torch_dtype=torch.bfloat16).to("cuda")
-pipe.enable_attention_slicing()  # economiza VRAM
-
-def generate_image(prompt, seed=None):
-    return pipe(prompt, height=1024, width=1024, guidance_scale=3.5, num_inference_steps=50, generator=torch.manual_seed(seed)).images[0]
-O Orquestrador chama os agentes sequencialmente, registrando logs e mantendo estado em /content/drive/MyDrive/ArtisanAI/projetos/.
-
-Interface no Colab
-Usamos Gradio (embutido no notebook) para upload de imagens e coleta do briefing:
-
-python
-import gradio as gr
-
-def pipeline_completo(briefing, imagens_referencia, num_imagens, modo_revisao):
-    # ... executa orquestrador ...
-    return imagens_geradas, relatorio_texto
-
-iface = gr.Interface(fn=pipeline_completo, inputs=[...], outputs=[...], title="ArtisanAI Studio")
-iface.launch(share=True)
-Melhorias Implementadas
-✅ Avaliação de qualidade 3 camadas (CLIP + estética + artefatos).
-
-✅ Substituição inteligente de prompts quando um prompt falha 3 variações.
-
-✅ Upload de imagens de referência para análise de estilo real, sem dependência de Instagram.
-
-✅ Controle de orçamento: opção de definir custo máximo ao usar APIs pagas.
-
-✅ Cache de prompts aprovados – acelera projetos similares.
-
-✅ Modo revisão humana via Gradio – para projetos críticos.
-
-✅ Detector de similaridade visual (opcional) usando SSCD para evitar plágio acidental.
-
-Estrutura de Pastas no Google Drive
-text
-ArtisanAI_Studio/
-├── notebook_principal.ipynb
-├── agentes/
-│   ├── analisador.py
-│   ├── prompter.py
-│   ├── designer.py
-│   └── juiz.py
-├── config.py (chaves de API e ajustes)
-├── projetos/
-│   └── <nome_projeto>/
-│       ├── style_guide.json
-│       ├── prompts.json
-│       └── imagens_aprovadas/
-└── logs/
+import gc, torch
+def unload_model(model_name):
+    del globals()[model_name]
+    gc.collect()
+    torch.cuda.empty_cache()
