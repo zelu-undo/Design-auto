@@ -409,6 +409,9 @@ class Orquestrador:
             print("📜 Continuando sem GPU...")
             raise RuntimeError("GPU não disponível. Execute em ambiente com GPU.")
         
+        # Mostrar progresso geral
+        print(f"\n🚀 Gerando {num_imagens} imagens...\n")
+        
         estado = self.gerenciador.carregar_estado()
         prompts_list = estado.get("prompts", []) if estado else []
         
@@ -419,6 +422,11 @@ class Orquestrador:
         ]
         
         while imagens_aprovadas < num_imagens and tentativas < max_tentativas_total:
+            # Mostrar progresso da imagem atual
+            filled = '█' * imagens_aprovadas
+            empty = '░' * (num_imagens - imagens_aprovadas)
+            print(f"\n📊 Imagem {imagens_aprovadas + 1}/{num_imagens}: [{filled}{empty}]")
+            
             if not prompts_nao_processados:
                 # Gerar mais prompts se necessário
                 prompts_extra = self.executar_etapa_prompts(

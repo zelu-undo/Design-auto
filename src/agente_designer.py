@@ -24,6 +24,22 @@ except ImportError:
     FluxPipeline = None
 
 
+class ProgressCallback:
+    """Callback para exibir progresso da geração."""
+    
+    def __init__(self, total_steps: int = 28):
+        self.total_steps = total_steps
+        self.current_step = 0
+    
+    def __call__(self, step: int, timestep: int, latents: Any) -> None:
+        self.current_step = step
+        progress = int((step / self.total_steps) * 100)
+        # Imprimir barra de progresso
+        filled = '█' * (progress // 5)
+        empty = '░' * (20 - (progress // 5))
+        print(f"\r🎨 Gerando: [{filled}{empty}] {progress}%", end='', flush=True)
+
+
 class ModoDesigner(Enum):
     """Modos de operação do Designer."""
     BASIC = "basic"       # SDXL-Turbo 768x768, ~5-10s
@@ -204,7 +220,10 @@ class AgenteDesigner:
         
         # Gerar imagem usando IA real
         if TORCH_DISPONIVEL and self.pipeline and hasattr(self.pipeline, '__call__'):
+            # Callback para progresso
+            callback = ProgressCallback(total_steps=num_inference_steps or 28)
             generator = torch.Generator(device=self.device).manual_seed(seed)
+            print(f"\n🎨 Gerando imagem de {largura}x{altura}...")
             imagem = self.pipeline(
                 prompt=prompt,
                 negative_prompt=negativo,
@@ -212,8 +231,11 @@ class AgenteDesigner:
                 guidance_scale=guidance_scale,
                 height=altura,
                 width=largura,
-                generator=generator
+                generator=generator,
+                callback=callback,
+                callback_steps=1
             ).images[0]
+            print(f"\n✅ Imagem gerada!")
         else:
             # Pipeline não disponível (sem GPU) - usar fallback
             raise RuntimeError("Pipeline não inicializado. Execute em ambiente com GPU.")
