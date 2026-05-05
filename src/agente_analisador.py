@@ -32,6 +32,7 @@ class AgenteAnalisador:
     # Modelo para análise de imagens (Qwen2.5-VL é melhor que LLaVA)
     MODELO_QWEN = "Qwen/Qwen2.5-VL-7B-Instruct"
     MODELO_LLAVA_16 = "llava-hf/llava-v1.6-mistral-7b-hf"
+    MODELO_GEMMA = "google/gemma-2-9b-it"  # Fallback para texto
     
     def __init__(self, pasta_projeto: Optional[Path] = None):
         self.pasta_projeto = pasta_projeto
