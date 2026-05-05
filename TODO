@@ -71,11 +71,4 @@ Como a T4 tem ~15 GB de VRAM, carregamos apenas um modelo pesado por vez. Para
 - **Prompter (Gemma 2 9B)**: ~6 GB em 4‑bit. Descarregado após gerar prompts.
 - **Designer (Flux.1 Dev)**: ~12 GB (com atenção slicing). Permanece ativo durante toda a etapa de geração.
 - **Juiz (CLIP + Aesthetic)**: modelos leves (~2 GB combinados), podem ser carregados junto com o Designer ou em sequência.
-
-Script de descarregamento:
-```python
-import gc, torch
-def unload_model(model_name):
-    del globals()[model_name]
-    gc.collect()
-    torch.cuda.empty_cache()
+torch.cuda.empty_cache()
