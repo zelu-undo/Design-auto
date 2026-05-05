@@ -26,8 +26,11 @@ cd Design-auto
 # Instale as dependências (ambiente com GPU recomendado)
 pip install -r requirements.txt
 
-# Execute
+# Execute via CLI
 python main.py -p meu_projeto -b "Fashion moderna" -n 5
+
+# OU execute via GUI
+python main.py --gui
 ```
 
 ## 📋 Modos de Operação

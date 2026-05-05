@@ -282,4 +282,15 @@ Exemplos de uso:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    
+    if len(sys.argv) > 1 and sys.argv[1] == "--gui":
+        # Importar aqui para evitar circular
+        try:
+            from gui import iniciar_interface
+            iniciar_interface()
+        except ImportError as e:
+            print(f"Erro ao iniciar GUI: {e}")
+            print("Execute: pip install gradio")
+    else:
+        main()
