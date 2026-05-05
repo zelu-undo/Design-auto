@@ -141,11 +141,11 @@ python main.py -p projeto -b "Logo" --modo pro
 
 ## ☁️ Google Colab
 
-### Um Clique (Repositório Público)
+### Um Clique
 
-Clique no badge para abrir diretamente:
+Abra o notebook direto no Colab:
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github.com/zelu-undo/Design-auto/blob/main/colab.ipynb)
+https://colab.research.google.com/github.com/zelu-undo/Design-auto/blob/main/colab.ipynb
 
 ### Configurações Recomendadas
 
