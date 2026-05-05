@@ -211,30 +211,56 @@ class AgenteDesigner:
         return caminho, seed
     
     def _criar_imagem_mock(self, altura: int, largura: int, seed: int) -> Any:
-        """Cria uma imagem mock para testes."""
+        """Cria uma imagem mock para testes sem GPU."""
         try:
-            from PIL import Image, ImageDraw
+            from PIL import Image, ImageDraw, ImageFont
+            import random
             
             random.seed(seed)
-            r = random.randint(50, 200)
-            g = random.randint(50, 200)
-            b = random.randint(50, 200)
             
-            img = Image.new('RGB', (largura, altura), (r, g, b))
+            # Cor de fundo baseada no seed (azul/acinzentado para logo/logística)
+            cores_fundo = [
+                (45, 85, 145),    # Azul profissional
+                (52, 73, 94),    # Azul escuro
+                (236, 240, 241), # Cinza claro
+                (44, 62, 80),    # Azul noite
+                (231, 76, 60),  # Vermelho accent
+            ]
+            cor_fundo = cores_fundo[seed % len(cores_fundo)]
+            
+            img = Image.new('RGB', (largura, altura), cor_fundo)
             draw = ImageDraw.Draw(img)
             
-            for i in range(5):
-                x1 = random.randint(0, largura - 1)
-                y1 = random.randint(0, altura - 1)
-                x2 = random.randint(0, largura - 1)
-                y2 = random.randint(0, altura - 1)
-                # Garantir coordenadas ordenadas
-                left = min(x1, x2)
-                right = max(x1, x2)
-                top = min(y1, y2)
-                bottom = max(y1, y2)
-                cor = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-                draw.rectangle([left, top, right, bottom], outline=cor, width=3)
+            # Adicionar elementos visuais mais elaborados
+            # Linhas horizontais (estilo logo)
+            num_linhas = random.randint(2, 5)
+            for i in range(num_linhas):
+                y = altura // (num_linhas + 1) * (i + 1)
+                espessura = random.randint(3, 15)
+                cor_linha = (255, 255, 255) if sum(cor_fundo) < 300 else (0, 0, 0)
+                draw.line([(0, y), (largura, y)], fill=cor_linha, width=espessura)
+            
+            # Circunferência (ícone)
+            centro_x, centro_y = largura // 2, altura // 2
+            raio = min(largura, altura) // 4
+            cor_accent = (255, 255, 255) if sum(cor_fundo) < 300 else (231, 76, 60)
+            draw.ellipse([
+                centro_x - raio,
+                centro_y - raio,
+                centro_x + raio,
+                centro_y + raio
+            ], outline=cor_accent, width=8)
+            
+            # Texto (se suportado)
+            try:
+                # Tentar adicionar texto simplificado
+                draw.text(
+                    (largura // 2, altura - 30),
+                    "ARTISAN",
+                    fill=cor_accent
+                )
+            except:
+                pass
             
             return img
         except ImportError:
